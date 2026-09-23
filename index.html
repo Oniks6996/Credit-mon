@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Анализ кредитного отчёта — БФЛ/РДГ</title>
+<style>
+  :root{
+    --bg:#f7f7f8;--card:#fff;--text:#1a1a1a;--muted:#666;--border:#e2e2e5;
+    --accent:#b3271e;--accent2:#0f7a3d;--warn:#a35a00;--chip:#f0f0f2;--sell:#eef5ff;
+    box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){--bg:#151517;--card:#1e1e21;--text:#eee;--muted:#999;--border:#333;--chip:#2a2a2d;--sell:#182636;}
+    }
+  :root[data-theme="dark"]{--bg:#151517;--card:#1e1e21;--text:#eee;--muted:#999;--border:#333;--chip:#2a2a2d;--sell:#182636;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;font-size:15px;line-height:1.45}
+  .wrap{max-width:1140px;margin:0 auto;padding:24px 16px 60px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 20px;font-size:13px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px}
+  .card.sell{background:var(--sell);border-color:#7fa8d9}
+  .drop{border:2px dashed var(--border);border-radius:10px;padding:28px;text-align:center;cursor:pointer}
+  .drop:hover{border-color:var(--accent)}
+  .drop input{display:none}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .kpi{background:var(--chip);border-radius:8px;padding:12px}
+  .kpi .n{font-size:19px;font-weight:700}
+  .kpi .l{color:var(--muted);font-size:12px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;white-space:nowrap}
+  .b-ok{background:#e6f4ea;color:var(--accent2)}
+  .b-risk{background:#fdeaea;color:var(--accent)}
+  .b-warn{background:#fff3e0;color:var(--warn)}
+  .tablewrap{overflow-x:auto}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+  input[type=number],input[type=text]{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
+  .row>div{flex:1;min-width:140px}
+  .hint{color:var(--muted);font-size:12px;margin-top:4px}
+  .section-title{font-size:14px;font-weight:700;margin:0 0 10px}
+  .pill{background:var(--chip);border-radius:6px;padding:8px 10px;font-size:12px;margin-bottom:8px}
+  #status{color:var(--muted);font-size:13px}
+  .err{color:var(--accent)}
+  button{background:var(--accent2);color:#fff;border:none;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:13px}
+  button:hover{opacity:.9}
+  .narrative{font-size:14px;padding:10px 12px;background:var(--chip);border-radius:8px;margin-bottom:12px}
+  .narrative b{color:var(--accent)}
+  .compliance{border:2px solid var(--accent);background:#fdeaea22}
+  .compliance .section-title{color:var(--accent)}
+  .compliance .pill{background:#fff, var(--text)#000}
+  :root[data-theme="dark"] .compliance .pill,
+  .win{color:var(--accent2);font-weight:700}
+  @media(prefers-color-scheme: dark){:root:not([data-theme="light"]) .compliance .pill{background:#2a1414}} 
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Анализ кредитного отчёта клиента</h1>
+<p class="sub">Загрузите PDF-отчёт (НБКИ / ОКБ). Разбор происходит в браузере, файл никуда не отправляется.</p>
+
+<div class="card">
+ <div class="drop" id="drop">
+  <input type="file" id="file" accept="application/pdf">
+  <div id="dropLabel">Перетащите PDF сюда или нажмите, чтобы выбрать файл</div>
+ </div>
+ <p id="status"></p>
+</div>
+
+<div id="results" style="display:none">
+
+ <div class="card">
+  <div class="section-title" id="subjName">Клиент</div>
+  <div id="narrative"></div>
+  <div class="grid" id="kpis"></div>
+ </div>
+
+ <div class="card sell">
+  <div class="section-title">Сравнительный анализ решений</div>
+  <div class="row">
+   <div><label>Срок БФЛ, мес.</label><input type="number" id="bflMonths" value="7"></div>
+   <div><label>Стоимость БФЛ, ₽</label><input type="number" id="bflCost" value="200000"></div>
+   <div><label>Срок РДГ, мес.</label><input type="number" id="rdgMonths" value="15"></div>
+   <div><label>Стоимость РДГ, ₽</label><input type="number" id="rdgCost" value="150000"></div>
+   <div><label>Срок банков, если нет данных по кредиту (мес.)</label><input type="number" id="fallbackMonths" value="24"></div>
+   <div><button id="recalc">Пересчитать</button></div>
+  </div>
+  <div class="tablewrap" style="margin-top:12px"><table id="compareTable"></table></div>
+  <p class="hint">Расчёт по банкам — из фактических данных отчёта (остаток долга, ставка, ежемесячный платёж по каждому кредиту). БФЛ/РДГ — фиксированная стоимость процедуры, разбитая на введённый срок рассрочки. Суммы не захардкожены — меняются по кредиту и настройкам.</p>
+ </div>
+
+ <div class="card">
+  <div class="section-title">Кредиты — детализация</div>
+  <div class="tablewrap"><table id="loansTable"></table></div>
+ </div>
+
+ <div class="card compliance">
+  <div class="section-title">🔒 COMPLIANCE — передать юристу, не использовать для продажи</div>
+  <div id="riskBox"></div>
+ </div>
+
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const fmt = n => isFinite(n) ? Math.round(n).toLocaleString('ru-RU') + ' ₽' : '—';
+const num = s => { if(!s) return NaN; const c = s.replace(/[^\d,.\-]/g,'').replace(/\./g,'').replace(',', '.'); return parseFloat(c); };
+
+// в некоторых PDF из-за шрифтов часть кириллических слов напечатана с латинскими
+// буквами-двойниками (напр. "Минимaльная" — латинская "a"). Заменяем такие буквы
+// на кириллицу внутри слов, где уже есть кириллица — так не трогаем реальные
+// латинские данные (email, GUID, номера сделок).
+function normalizeHomoglyphs(text){
+  const map = {'A':'А','a':'а','B':'В','C':'С','c':'с','E':'Е','e':'е','H':'Н','K':'К','M':'М','O':'О','o':'о','P':'Р','p':'р','T':'Т','X':'Х','x':'х','Y':'У','y':'у'};
+  return text.split(/(\s+)/).map(tok=>{
+    if(!/[А-Яа-яЁё]/.test(tok)) return tok;
+    return tok.split('').map(ch=>map[ch]!==undefined?map[ch]:ch).join('');
+  }).join('');
+}
+
+//Инструмент загрузки файла
+document.getElementById('drop').onclick = ()=>document.getElementById('file').click();
+document.getElementById('drop').ondragover = e=>{e.preventDefault();};
+document.getElementById('drop').ondrop = e=>{e.preventDefault(); if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);};
+document.getElementById('file').onchange = e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); };
+
+//Процесс анализа, ошибка чтения и плейсхолдер во время процесса. 
+async function handleFile(file){
+  const status = document.getElementById('status');
+  status.textContent = 'Читаю PDF…';
+  document.getElementById('results').style.display='none';
+  try{
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+    let text = '';
+    for(let i=1;i<=pdf.numPages;i++){
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      let last=null;
+      for(const item of content.items){
+        if(last!==null && Math.abs(item.transform[5]-last)>2) text+='\n';
+        text += item.str + ' ';
+        last = item.transform[5];
+      }
+      text += '\n';
+    }
+    status.textContent = 'Готово. Страниц: '+pdf.numPages;
+    analyze(normalizeHomoglyphs(text));
+  }catch(err){
+    status.innerHTML = '<span class="err">Не удалось прочитать файл: '+err.message+'</span>';
+  }
+}
+
+//Парсинг даты
+function parseRuDate(s){
+  const months={'января':0,'февраля':1,'марта':2,'апреля':3,'мая':4,'июня':5,'июля':6,'августа':7,'сентября':8,'октября':9,'ноября':10,'декабря':11};
+  const parts = (s||'').trim().split(/\s+/);
+  if(parts.length<3) return null;
+  const day=parseInt(parts[0]), mon=months[parts[1]], year=parseInt(parts[2]);
+  if(mon===undefined) return null;
+  return new Date(year,mon,day);
+}
+
+//Обнуляем статус на случай последовательной загрузки
+let CURRENT = null;
+
+//Парсер данных из PDF
+function analyze(text){
+  const T = text;
+
+  const nameM = T.match(/СУБЪЕКТ КРЕДИТНОЙ ИСТОРИИ\s*\n\s*([^\n]+)/);
+  const dateM = T.match(/Кредитный отчет\s*\n?\s*на\s+(\d{2}\s+\S+\s+\d{4})/i);
+  document.getElementById('subjName').textContent = (nameM?nameM[1].trim():'Клиент') + (dateM? (' · отчёт на '+dateM[1]) : '');
+
+  const totalDebtM = T.match(/([\d\s.,]+)\s*р\.\s*\n\s*Задолженности по обязательствам/);
+  const totalDebt = totalDebtM? num(totalDebtM[1]) : NaN;
+
+  // якорь на описание раздела, а не на сам заголовок — заголовок повторяется в оглавлении вплотную
+  // к следующему заголовку, и без этого якоря регулярка ловила пустой кусок из оглавления
+  const activeSectionM = T.match(/Информация о действующих кредитах[\s\S]*?\n([\s\S]*?)(ЗАКРЫТЫЕ КРЕДИТНЫЕ ДОГОВОРЫ|ЗАПРЕТ НА КРЕДИТЫ И ЗАЙМЫ)/);
+  const activeSection = activeSectionM? activeSectionM[1] : '';
+
+  // допускаем пробел перед номером кредита на границе блоков, статус просрочки на строке заголовка
+  const blockRe = /(\d+)\.\s+([^\n]+?)\s*-\s*Договор займа[^\n]*?(Была просрочка по [\d.]+|Без просрочек|Просрочка[^\n]*?)?\s*\n([\s\S]*?)(?=\n\s*\d+\.\s+[^\n]+?\s*-\s*Договор займа|$)/g;
+  let m, loans = [];
+  while((m = blockRe.exec(activeSection))){
+    const creditor = m[2].trim(), overdueHeader = m[3], body = m[4];
+
+    const dealDateStr = (body.match(/Дата совершения сделки\s*\n?\s*(\d{2}\s+\S+\s+\d{4})/)||[])[1];
+    const totalPaidM = body.match(/Сумма всех внесенных платежей\s*\n\s*По обязательству\s*\n\s*([\d\s.,]+)\s*р/);
+    const principalPaidM = body.match(/По основному долгу\s*\n\s*([\d\s.,]+)\s*р/);
+    const interestPaidM = body.match(/По процентам\s*\n\s*([\d\s.,]+)\s*р/);
+    const rateM = body.match(/Минимальная\s*(?:процентная\s*)?ставка\s*\n\s*([\d.,]+)\s*%?/);
+    const monthlyM = body.match(/Величина среднемесячного платежа\s*\n\s*([\d\s.,]+)\s*р/);
+    const currentDebtM = body.match(/Общая\s+([\d\s.,]+)\s*р\./);
+    const overdue = overdueHeader ? overdueHeader.trim() : '—';
+
+    const payHistM = body.match(/Фактические платежи по договору([\s\S]*?)(Сведения об изменении договора|$)/);
+    let payCount = 0;
+    if(payHistM){
+      payCount = (payHistM[1].match(/\d{1,2}\s+(январ|феврал|март|апрел|ма[йя]|июн|июл|август|сентябр|октябр|ноябр|декабр)\S*/gi)||[]).length;
+    }
+    
+    //Записываем распознанные данные
+    loans.push({
+      creditor,
+      dealDateStr: dealDateStr || '—',
+      dealDate: dealDateStr? parseRuDate(dealDateStr) : null,
+      currentDebt: currentDebtM? num(currentDebtM[1]) : NaN,
+      paidTotal: totalPaidM? num(totalPaidM[1]) : NaN,
+      paidPrincipal: principalPaidM? num(principalPaidM[1]) : NaN,
+      paidInterest: interestPaidM? num(interestPaidM[1]) : NaN,
+      rate: rateM? parseFloat(rateM[1].replace(',','.')) : NaN,
+      monthly: monthlyM? num(monthlyM[1]) : NaN,
+      payCount,
+      overdue: overdue.replace(/\s+/g,' ')
+    });
+  }
+
+  CURRENT = {totalDebt, loans};
+  document.getElementById('results').style.display='block';
+  recompute();
+}
+
+document.getElementById('recalc').onclick = recompute;
+
+// месяцы до полного погашения по аннуитету: n = -ln(1 - r*P/A) / ln(1+r)
+function monthsToPayoff(P, ratePct, A){
+  if(!isFinite(P) || !isFinite(ratePct) || !isFinite(A) || A<=0 || P<=0) return NaN;
+  const r = ratePct/100/12;
+  if(r<=0) return P/A;
+  const x = 1 - r*P/A;
+  if(x<=0) return NaN; // платёж не покрывает даже проценты
+  return -Math.log(x)/Math.log(1+r);
+}
+
+//Начинаем рассчет данных
+function recompute(){
+  if(!CURRENT) return;
+  const fallbackMonths = parseFloat(document.getElementById('fallbackMonths').value)||24;
+  const bflMonths = parseFloat(document.getElementById('bflMonths').value)||7;
+  const bflCost = parseFloat(document.getElementById('bflCost').value)||0;
+  const rdgMonths = parseFloat(document.getElementById('rdgMonths').value)||15;
+  const rdgCost = parseFloat(document.getElementById('rdgCost').value)||0;
+  const {totalDebt, loans} = CURRENT;
+
+  let paidTotalSum=0, paidPrincipalSum=0, paidInterestSum=0, currentDebtSum=0;
+  let monthlySum=0, futureInterestSum=0, unknownCount=0, maxMonths=0;
+
+  //Анализ имеющихся кредитов и расчет количественных показателей для общего монитора
+  loans.forEach(l=>{
+    if(isFinite(l.paidTotal)) paidTotalSum += l.paidTotal;
+    if(isFinite(l.paidPrincipal)) paidPrincipalSum += l.paidPrincipal;
+    if(isFinite(l.paidInterest)) paidInterestSum += l.paidInterest;
+    if(isFinite(l.currentDebt)) currentDebtSum += l.currentDebt;
+    if(isFinite(l.monthly)) monthlySum += l.monthly;
+
+    let n = monthsToPayoff(l.currentDebt, l.rate, l.monthly);
+    if(!isFinite(n)) { n = fallbackMonths; unknownCount++; }
+    l.months = n;
+    maxMonths = Math.max(maxMonths, n);
+
+    if(isFinite(l.rate) && isFinite(l.currentDebt)){
+      l.futureInterest = l.monthly && isFinite(n) ? Math.max(0, l.monthly*n - l.currentDebt) : l.currentDebt*(l.rate/100/12)*n;
+    } else {
+      l.futureInterest = NaN;
+    }
+    if(isFinite(l.futureInterest)) futureInterestSum += l.futureInterest;
+  });
+
+  const totalToPayIfContinue = currentDebtSum + futureInterestSum;
+  
+  //Вывод в тексте
+  document.getElementById('narrative').innerHTML =
+    `Клиент уже внёс банкам <b>${fmt(paidTotalSum)}</b>, но основной долг за счёт этого уменьшился только на <b>${fmt(paidPrincipalSum)}</b>. `+
+    `Остальные <b>${fmt(paidInterestSum)}</b> ушли на проценты и другие начисления — на текущий долг это никак не повлияло.`;
+
+  //Сводка данных по кредитам
+  const kpis = [
+    ['Текущий долг', fmt(isFinite(totalDebt)?totalDebt:currentDebtSum)],
+    ['Уже выплачено банкам всего', fmt(paidTotalSum)],
+    ['Из них снизило основной долг', fmt(paidPrincipalSum)],
+    ['Из них ушло на проценты', fmt(paidInterestSum)],
+    ['Ежемесячный платёж сейчас (сумма по кредитам)', fmt(monthlySum)],
+    ['Сколько ещё переплатит, если платить дальше', fmt(futureInterestSum)],
+  ];
+  document.getElementById('kpis').innerHTML = kpis.map(([l,n])=>`<div class="kpi"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+  //Сравнение сценариев
+  const bankSavingsVsBfl = totalToPayIfContinue - bflCost;
+  const bankSavingsVsRdg = totalToPayIfContinue - rdgCost;
+  const bflMonthly = bflMonths>0 ? bflCost/bflMonths : bflCost;
+  const rdgMonthly = rdgMonths>0 ? rdgCost/rdgMonths : rdgCost;
+
+  document.getElementById('compareTable').innerHTML = `
+   <tr><th>Вариант</th><th>Платёж в месяц</th><th>Срок</th><th>Всего отдаст</th><th>Экономия vs "платить банкам"</th></tr>
+   <tr><td>Платить банкам как сейчас</td><td>${fmt(monthlySum)}</td><td>${maxMonths.toFixed(0)} мес.</td><td>${fmt(totalToPayIfContinue)}</td><td>—</td></tr>
+   <tr><td>БФЛ</td><td>${fmt(bflMonthly)}</td><td>${bflMonths} мес.</td><td>${fmt(bflCost)}</td><td class="win">${fmt(bankSavingsVsBfl)}</td></tr>
+   <tr><td>РДГ</td><td>${fmt(rdgMonthly)}</td><td>${rdgMonths} мес.</td><td>${fmt(rdgCost)}</td><td class="win">${fmt(bankSavingsVsRdg)}</td></tr>
+  `;
+  //Таблица детализации
+  const rows = loans.map(l=>{
+    const badge = l.overdue.startsWith('Была просрочка')||l.overdue.startsWith('Просрочка')
+      ? `<span class="badge b-warn">${l.overdue}</span>` : `<span class="badge b-ok">${l.overdue}</span>`;
+    return `<tr>
+      <td>${l.creditor}</td>
+      <td>${l.dealDateStr}</td>
+      <td>${fmt(l.currentDebt)}</td>
+      <td>${fmt(l.paidTotal)}</td>
+      <td>${fmt(l.paidInterest)}</td>
+      <td>${isFinite(l.rate)?l.rate+'%':'—'}</td>
+      <td>${isFinite(l.futureInterest)?fmt(l.futureInterest):'нет данных'}</td>
+      <td>${l.payCount}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('loansTable').innerHTML = `
+    <tr><th>Кредитор</th><th>Дата сделки</th><th>Остаток</th><th>Оплачено всего</th><th>Оплачено %</th><th>Ставка</th><th>Переплата дальше</th><th>Платежей</th><th>Статус</th></tr>
+    ${rows || '<tr><td colspan="9">Активные кредиты не распознаны в тексте отчёта.</td></tr>'}
+  `;
+
+  // Данные о Complience
+  const fewPay = loans.filter(l=>l.payCount<3);
+  const zero = fewPay.filter(l=>l.payCount===0);
+  const one = fewPay.filter(l=>l.payCount===1);
+  const two = fewPay.filter(l=>l.payCount===2);
+
+  // кредиты, взятые в течение 4 дней друг от друга
+  const withDates = loans.filter(l=>l.dealDate).sort((a,b)=>a.dealDate-b.dealDate);
+  let clusters = [];
+  for(let i=0;i<withDates.length;i++){
+    for(let j=i+1;j<withDates.length;j++){
+      const diffDays = Math.abs(withDates[j].dealDate - withDates[i].dealDate)/(1000*3600*24);
+      if(diffDays < 4){
+        clusters.push([withDates[i], withDates[j], diffDays]);
+      }
+    }
+  }
+
+  const bigDebtThreshold = 100000;
+  const bigDebtFewPay = loans.filter(l=>isFinite(l.currentDebt) && l.currentDebt>=bigDebtThreshold && l.payCount<3);
+
+  let html = '';
+  if(fewPay.length){
+    html += `<div class="pill"><b>Мало платежей по договору:</b> `+
+      fewPay.map(l=>`${l.creditor} — ${l.payCount} платеж(ей)`).join('; ')+
+      ` (из них: 0 платежей — ${zero.length}, 1 платёж — ${one.length}, 2 платежа — ${two.length}).</div>`;
+  }
+  if(clusters.length){
+    html += clusters.map(([a,b,d])=>
+      `<div class="pill"><b>Кредиты взяты почти одновременно (${d.toFixed(1)} дн. между сделками):</b> ${a.creditor} (${a.dealDateStr}) и ${b.creditor} (${b.dealDateStr}).</div>`
+    ).join('');
+  }
+  if(bigDebtFewPay.length){
+    html += `<div class="pill"><b>Крупный долг при малом числе платежей (порог ${fmt(bigDebtThreshold)}):</b> `+
+      bigDebtFewPay.map(l=>`${l.creditor} — остаток ${fmt(l.currentDebt)}, платежей: ${l.payCount}`).join('; ')+`.</div>`;
+  }
+  if(!html){
+    html = '<div class="pill">Явных compliance-рисков по заданным правилам не найдено.</div>';
+  }
+  html += `<p class="hint">Это не аргумент для продажи. Такие кредиты стоит отдельно передать юристу/старшему специалисту — банк или суд может расценить их как взятые незадолго до банкротства без намерения платить (ст. 213.28 127-ФЗ), это риск отказа в списании конкретного долга.</p>`;
+  document.getElementById('riskBox').innerHTML = html;
+
+  if(unknownCount>0){
+    document.getElementById('status').textContent = document.getElementById('status').textContent.replace(/ · .*$/,'') +
+      ` · по ${unknownCount} кредит(ам) не хватило данных для расчёта срока — использован срок по умолчанию (${fallbackMonths} мес.).`;
+  }
+}
+</script>
+</body>
+</html>
